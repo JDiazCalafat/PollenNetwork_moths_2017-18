@@ -1,5 +1,5 @@
 ---
-title: "The role of adult Noctuidae moths and their food plants in a nocturnal pollen-transport network in Mallorca (Balearic Islands, Spain)"
+title: "The role of adult Noctuidae moths and their food plants in a nocturnal pollen-transport network on a Mediterranean island"
 author: "Joan Díaz Calafat"
 date: "24/10/2021"
 output: pdf_document
@@ -7,12 +7,12 @@ output: pdf_document
 
 # Code reproducibility
 
-To allow a better reproducibility of this script, we recommend to use checkpoint() set at 2021-10-24. This allows to install and use the packages that were available and run at the time of making this script
+To allow a better reproducibility of this script, we recommend to use checkpoint() set at 2022-01-06. This allows to install and use the packages that were available and run at the time of making this script
 
 ```{r}
 #install.packages("checkpoint")
 library(checkpoint)
-checkpoint("2021-10-24")
+checkpoint("2022-01-06")
 ```
 
 # Package and data loading
@@ -29,21 +29,11 @@ Load data on moth-plant interactions:
 pol.data.all <- read.csv("Moth_pollen_list.csv", header = TRUE, encoding = "UTF-8", sep = ";")
 
 # Build an interaction matrix
-net.all <- data.frame(unclass(table(pol.data.all$Moth.species, pol.data.all$Pollen.species)))
-
-# Remove species with only one interaction:
-# Detect plant (col) and moth (row) species with only one interaction
-col.out <- names(colSums(net.all)[which(colSums(net.all) == 1)])
-row.out <- names(rowSums(net.all)[which(rowSums(net.all) == 1)])
-
-# Remove those from the main dataset
-net.all <- net.all[,-which(colnames(net.all) %in% col.out)]
-
-net.all <- net.all[-which(rownames(net.all) %in% row.out),]
+net.all <- data.frame(unclass(table(pol.data.all$Pollen.species, pol.data.all$Moth.species)))
 
 # Remove Unknown Ericacaee, since they would either be A. unedo or E. multiflora and therefore creating a new fake species would hamper our analyses
 
-net.all <- net.all[,-which(colnames(net.all) %in% "Ericaceae")]
+net.all <- net.all[-which(rownames(net.all) %in% "Ericaceae"),]
 ```
 
 # Bipartite plots
@@ -53,10 +43,15 @@ The adjacency matrix of the moth-plant interactions:
 _To properly visualize this plot please use the zoom tool in the RStudio plot viewer. Export at 1267x1000 pixels._
 
 ```{r}
-visweb(net.all, 
-       type="nested",
+net.all.t <- as.data.frame(t(net.all)) # traspose network so plants are showed at the bottom of the matrix and at the top of the bipartite plot (next R chunk)
+
+visweb(net.all.t, 
+       type="diagonal",
        square="interaction",
-       labsize = 1.8
+       labsize = 3,
+       frame = TRUE,
+       text = "interaction",
+       textsize = 2
        )
 ```
 
@@ -69,12 +64,12 @@ _To properly visualize this plot please use the zoom tool in the RStudio plot vi
 
 par(font = 3) # turn all text to italics
 
-plotweb(net.all, 
+plotweb(net.all.t, 
         method="cca", 
         #Set the color of the row nodes
         col.low="black",
         #Set the color of the column nodes, with A. unedo interactions a different color
-        col.interaction = ifelse(colnames(net.all) == "Arbutus.unedo" ,
+        col.interaction = ifelse(colnames(net.all.t) == "Arbutus unedo" ,
                              adjustcolor('darkgreen', alpha.f = 0.5), #add transparency to colors
                              adjustcolor('black', alpha.f = 0.5)),
         bor.col.interaction = NA,
@@ -91,25 +86,29 @@ plotweb(net.all,
 ## Metric calculation at the full network level
 
 ```{r}
-ind.all <- networklevel(net.all, index = c("mean number of shared partners", "partner diversity", "niche overlap", "extinction slope", "robustness", "connectance", "weighted connectance", "web asymmetry", "H2"))
+set.seed(777)
+# Weighed number of links per trophic level:
+grouplevel(net.all, index=c("mean number of links"), weighted = TRUE)
 
-grouplevel(net.all, index=c("mean number of species", "mean number of links"))
+# Other metrics
+net.metrics <- networklevel(net.all, index = c("mean number of shared partners", "partner diversity", "niche overlap", "extinction slope", "robustness", "connectance", "weighted connectance", "web asymmetry", "H2", "linkage density", "links per species"))
 
-ind.all
+net.metrics
 
-write.csv2(ind.all, "indices_network.csv") #Export
+
+write.csv2(net.metrics, "network_metrics.csv") #Export
 ```
 
 ## Metric calculation at the species level
 
 ```{r}
-ind.all.sp <- specieslevel(net.all, index=c("degree", "species strength", "interaction push pull", "species specificity"), level="both", logbase=exp(1), low.abun=NULL, 
+sp.metrics <- specieslevel(net.all, index=c("degree", "species strength", "interaction push pull", "species specificity"), level="both", logbase=exp(1), low.abun=NULL, 
 	high.abun=NULL, PDI.normalise=TRUE, PSI.beta=c(1,0), nested.method="NODF", 
 	nested.normalised=TRUE, nested.weighted=TRUE, empty.web=TRUE)
 
-ind.all.sp[1]
-head(ind.all.sp[2])
+sp.metrics[1]
+head(sp.metrics[2])
 
-write.csv2(ind.all.sp[1], "ind_all_sp_plants.csv") #Export
-write.csv2(ind.all.sp[2], "ind_all_sp_moths.csv") #Export
+write.csv2(sp.metrics[1], "metrics_sp_moths.csv") #Export
+write.csv2(sp.metrics[2], "metrics_sp_plants.csv") #Export
 ```
